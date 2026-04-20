@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "server",
+  "dolt_database": "code_overhaul_skill",
+  "project_id": "3814be12-b524-4215-b2c4-a751b374eaae"
+}
