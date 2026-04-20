@@ -1,20 +1,21 @@
-# code-overhaul-review
+# code-overhaul
 
-Opinionated, interactive health audit for a codebase. Challenges scope, surfaces the highest-leverage changes, files deferred work via beads.
+Opinionated, interactive health audit for a codebase. Challenges scope, picks the highest-leverage changes, files deferred work through beads.
 
 ## Structure
 
-- `skills/code-overhaul-review/SKILL.md` -- the full protocol (Step 0, five review sections, stack addendums, outputs)
-- `commands/code-overhaul-review.md` -- slash command entry point
-- `install.sh` / `uninstall.sh` -- symlinks into `~/.claude/`
+- `skills/code-overhaul/SKILL.md` -- the full protocol (Preflight, Step 0, five review sections, stack addendums, outputs).
+- `commands/code-overhaul.md` -- slash command entry point.
+- `install.sh` / `uninstall.sh` -- symlinks into `~/.claude/`.
+- `skills/code-overhaul/eval/` -- rubric, grader prompt, and scenarios used to verify the skill.
 
 ## Conventions
 
-User-facing text should avoid AI writing patterns. Keep language direct and specific. No promotional phrasing, no filler. Lead with the action.
+User-facing text must avoid AI writing patterns. Keep language direct and specific. No promotional phrasing, no filler. Lead with the action. Directive verbs (*must*, *do*, *stop*) are reserved for the skill's instructions to the agent, not for the README or CLAUDE notes.
 
 ## Editing the skill
 
-The skill file is self-contained: a single `SKILL.md` with a generic section and three stack-specific addendums (iOS/Swift, Go, Web/JS/CSS). When adding a new addendum:
+The skill file is self-contained: one `SKILL.md` with a generic section and three stack-specific addendums (iOS/Swift, Go, Web/JS/CSS). When adding a new addendum:
 
 1. Add it under a new `## Addendum: <stack>` heading at the end of the file.
 2. Document its triggers (file globs, manifest files).
@@ -24,6 +25,8 @@ The skill file is self-contained: a single `SKILL.md` with a generic section and
 
 Keep the generic section short. Addendums carry the stack-specific depth.
 
+After changing SKILL.md, re-run the grader in `eval/GRADER.md` against `eval/RUBRIC.md` to confirm the skill still passes.
+
 ## Commit hygiene
 
-Do not add Co-Authored-By trailers for AI tools. Commits should list only human authors.
+Do not add Co-Authored-By trailers for AI tools. Commits list human authors only.
