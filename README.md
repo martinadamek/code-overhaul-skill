@@ -56,7 +56,7 @@ At the end of a session you get:
 ### Via `npx skills` (recommended)
 
 ```bash
-npx skills add ehmo/code-overhaul
+npx skills add ehmo/code-overhaul-skill
 ```
 
 The CLI fetches the repo, discovers `skills/code-overhaul/SKILL.md` from its frontmatter `name:` field, and installs it into the right directory for your agent.
@@ -64,15 +64,15 @@ The CLI fetches the repo, discovers `skills/code-overhaul/SKILL.md` from its fro
 Install only the skill (no slash command) for a specific agent:
 
 ```bash
-npx skills add ehmo/code-overhaul -a claude-code
+npx skills add ehmo/code-overhaul-skill -a claude-code
 ```
 
 Companion commands:
 
 ```bash
 npx skills list
-npx skills update ehmo/code-overhaul
-npx skills remove ehmo/code-overhaul
+npx skills update ehmo/code-overhaul-skill
+npx skills remove ehmo/code-overhaul-skill
 ```
 
 ### Claude Code (manual install)
