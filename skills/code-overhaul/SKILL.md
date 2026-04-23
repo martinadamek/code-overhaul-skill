@@ -5,8 +5,8 @@ description: |
   Audit a codebase for maintenance and modernization. Challenges scope,
   reviews architecture/quality/tests/performance/dependencies, files
   deferred work via bd. Language-specific addendums for iOS/Swift, Go,
-  and Web/JS/CSS activate automatically based on what's in the repo.
-  Supports monorepos with mixed stacks.
+  Web/JS/CSS, and Ruby on Rails activate automatically based on what's
+  in the repo. Supports monorepos with mixed stacks.
 allowed-tools:
   - Read
   - Grep
@@ -21,7 +21,7 @@ Audit this codebase for maintenance, modernization, and overhaul. For every issu
 
 Health check, not feature review. Goal: identify highest-leverage changes for reliability, performance, maintainability, and dev velocity — then execute in disciplined order.
 
-**Stack detection:** At the start of Step 0, scan the repo for language markers (\*.swift/Xcode projects, go.mod, package.json/tsconfig). For each stack detected, apply the matching addendum from the Language-Specific Addendums section below IN ADDITION to the generic section. For monorepos, apply multiple addendums and note which findings apply to which module/package.
+**Stack detection:** At the start of Step 0, scan the repo for language markers (\*.swift/Xcode projects, go.mod, package.json/tsconfig, Gemfile/bin/rails). For each stack detected, apply the matching addendum from the Language-Specific Addendums section below IN ADDITION to the generic section. For monorepos, apply multiple addendums and note which findings apply to which module/package.
 
 ## Priority hierarchy
 
@@ -405,3 +405,149 @@ Add rows: Framework, TS strict Y/N, `any` count, ESLint violations, bundle size 
 - CSS reset whack-a-mole → fix the specificity model, not symptoms.
 - `any` as escape hatch → every `any` is deferred debt with compound interest.
 - Framework churn → migrate when solving a concrete problem, not for novelty.
+
+---
+
+## Addendum: Ruby on Rails
+
+**Triggers:** `Gemfile`, `config/application.rb`, `bin/rails`, `Rakefile`, `db/schema.rb`, `.ruby-version`, `*.rb` files with Rails idioms.
+
+### Step 0 additions
+
+- Run: `bin/rubocop`, `bin/brakeman`, `bin/bundler-audit check --update`, `bundle outdated --strict`, `bin/rails stats`, `bin/rails notes` (TODO/FIXME/HACK density).
+- Ruby version (`.ruby-version`) and Rails version (`Gemfile.lock`) determine modernization surface:
+  - Rails 8.x: Solid trio (Queue/Cache/Cable), built-in auth generator, Kamal 2, Propshaft default.
+  - Rails 7.1+: `params.expect`, encrypted attributes, async queries (`load_async`), `Current` model pattern.
+  - Ruby 3.2+: pattern matching, `Data.define`, anonymous block forwarding, endless methods, rightward assignment.
+- Dep audit — replaceable by vanilla Rails / native tools (flag ONLY when repo is otherwise on recent Rails; do not recommend ripping out working dependencies without cause):
+  - `paperclip`/`carrierwave` → Active Storage
+  - `devise` → Rails 8 built-in auth or custom passwordless (only if repo shows 37signals-style signals)
+  - `pundit`/`cancancan` → predicate methods on models (same caveat)
+  - `sidekiq` + Redis → Solid Queue (Rails 8+, modest throughput)
+  - `redis-rails` → Solid Cache
+  - `sprockets`/`webpacker` → Propshaft + import maps / jsbundling-rails
+  - `jquery-rails`/`turbolinks` → Turbo + Stimulus
+  - `paranoia`/`acts_as_paranoid` → hard delete or `discarded_at` (unless compliance requires soft delete)
+  - `draper` and decorator gems → helpers + partials
+- Rails-specific tech-debt hotspots: models/controllers >300 lines, migrations with model references, fixtures/factories with cyclic dependencies, schema.rb churn, `app/services/` growth rate.
+
+### Style detection (for gated rules below)
+
+Rails is the most opinion-fractured stack this skill covers. Before flagging style, detect alignment:
+
+- **37signals-aligned signals:** Solid Queue/Cache/Cable in `Gemfile`, Minitest + fixtures, rich model concerns (`app/models/<model>/` subdirs), Hotwire-only frontend, absent or sparse `app/services/`, custom auth (no Devise), `Current` model for request-scoped state, UUID/UUIDv7 primary keys.
+- **Industry-mainstream signals:** RSpec + FactoryBot, Devise, Sidekiq + Redis, `app/services/` as a core pattern, Pundit/CanCanCan, ViewComponent.
+
+Fire the "37signals-style" rules below only when the repo already shows ≥2 aligned signals. In a Devise-using codebase, do NOT recommend ripping out Devise. In a mainstream codebase, flag *inconsistency* (e.g., half service objects / half rich models for overlapping concerns), not wholesale style conversion. The opinionated items below are adapted from the [37signals coding style guide](https://github.com/marckohlbrugge/unofficial-37signals-coding-style-guide).
+
+### Architecture additions
+
+**Core (apply always):**
+
+- **Thin controllers, rich models.** Flag controllers doing transactions, enqueuing multiple jobs, multi-model writes, or conditional business logic. The action orchestrates; domain logic lives on the model.
+- **Callback discipline.** Cross-model `after_create`/`after_save` chains, `after_commit` racing with background jobs (`enqueue_after_transaction_commit` missing when jobs read freshly-written rows).
+- **Active Job adapter consistency.** Solid Queue, Sidekiq, GoodJob — pick one. Note if dev/test uses `:inline` while prod uses a queue (masks ordering bugs).
+- **Transaction boundaries.** Nested transactions, jobs enqueued inside transactions, mailers sent mid-transaction.
+- **Authorization placement.** Predicate on model (`editable_by?`) vs policy class vs ad-hoc `before_action` — consistent?
+- **Multi-tenancy.** Scoping at query layer, middleware, or forgotten in places? `default_scope` is a footgun — justify or flag.
+- **Turbo/Stimulus vs SPA drift.** Hotwire-committed apps should not have stray React islands; SPA-committed apps should not have rogue Turbo frames. Either is fine; mixing without a boundary is not.
+- **Engine / module boundaries.** For apps >50k LOC, are module seams defined? Packwerk or `app/<domain>/` separation where warranted?
+- **Diagrams warranted:** request → controller → model → view flow on a critical path; background-job lifecycle (enqueue → commit → worker → retry → failure); tenant-scoping boundary.
+
+**37signals-style (gated):**
+
+- State as records, not booleans. `closed`/`archived`/`published` columns → consider a state table when "who" and "when" matter (ORM: `has_one :closure`). Do NOT recommend this for trivial flags.
+- Service object sprawl (`app/services/` with many single-caller, single-method POROs) → push behavior into domain models. Rule of three before extracting.
+- `delegated_type` over traditional polymorphic associations for heterogeneous collections needing pagination.
+
+### Code quality additions
+
+**Core:**
+
+- **N+1 queries.** Grep for associations iterated without `includes`/`preload`/`eager_load`. Configure Bullet in dev/test if absent. Cite file:line per hit.
+- **Missing indexes.** Every `belongs_to` indexed? Every frequently-filtered column? Cross-check `db/schema.rb` against `where`/`find_by` call sites.
+- **DB constraints vs AR validations.** Uniqueness validation without a unique index → race condition. `presence: true` without `NOT NULL` → inconsistency. Cite both.
+- **Strong params on Rails 7.1+.** Flag `params.require(:x).permit(...)` → recommend `params.expect(x: [...])` (returns 400 instead of 500 on malformed input).
+- **Brakeman findings.** Every unresolved warning: triage as real / false-positive / accepted-risk. SSRF on outbound requests, mass assignment, open redirects, unsafe reflection, YAML.load, SQL injection — cite file:line.
+- **`rescue` discipline.** Bare `rescue` catches `Exception` (including `SystemExit`); `rescue => e` catches `StandardError` broadly. Flag both when narrower rescue would do. Rescues that swallow `ActiveRecord::RecordInvalid` silently are bugs.
+- **Fat everything.** Controllers/models >300 lines, actions >20 lines, methods >15 lines.
+- **Unscoped finders with user input.** `Model.find(params[:id])` without tenant/user scoping → IDOR. Recommend `current_user.models.find(params[:id])` pattern.
+- **Callback side effects.** Mailers sent in `after_save`, jobs enqueued in `before_destroy` — brittle, test-hostile, transaction-unsafe.
+- **Migration hygiene.** Unreversible migrations without explicit `reversible`, model references in migrations (break on future schema drift), missing `strong_migrations` guards for lock-heavy operations on large tables.
+- **Zeitwerk compliance.** Files not matching autoload expectations, stray `require_dependency`/`require` in app code.
+- **Negative scope naming.** `scope :not_deleted`, `scope :unarchived` → invert to positive (`:active`, `:live`).
+- **Stale diagrams/comments.** Class-level comments describing old behavior; ERD drift from actual schema.
+
+**37signals-style (gated):**
+
+- Service objects reviewed one-by-one for "earning their keep"; collapse single-caller, single-method services into model methods.
+- `dependent: :destroy` where `:delete_all` suffices (no callbacks) — destroy runs N queries, delete_all runs one.
+- `StringInquirer` for action/status string columns compared frequently (`event.action.completed?` vs `event.action == "completed"`).
+
+### Test additions
+
+**Core:**
+
+- **Framework consistency.** Minitest OR RSpec, not both. Mixed presence → flag.
+- **Factory/fixture consistency.** FactoryBot *or* fixtures. Mixed → fragmented setup patterns.
+- **System tests for Hotwire paths.** Every Turbo Stream/Frame interaction needs a browser-level test or the feature is untested.
+- **Request tests over controller tests.** Controller tests exercise less; request tests go through the full middleware stack.
+- **Parallelization.** `parallelize(workers: :number_of_processors)` in test helper; flag absence for suites >30s.
+- **N+1 detection in test env.** Bullet with `raise = true` in test mode catches N+1s at PR time.
+- **Transactional tests.** `use_transactional_tests = true` default; if disabled, why?
+- **Flaky-test quarantine.** Runtime, flakiness rate, hot-spot files from CI data if available.
+- **Fixture/factory hygiene.** References to non-existent associations, circular `association` chains, factories that hit external services, fixtures with hard-coded dates that rot.
+- **Missing test categories.** Mailer tests, job tests, auth-bypass/IDOR integration tests, system tests for critical flows.
+- **Suite speed.** Flag >60s unit+integration, >5min with system tests.
+
+**37signals-style (gated):**
+
+- Fixtures over factories (deterministic IDs, loaded once, faster boot).
+- `assert_difference`/`assert_changes` over manual before/after assertions.
+- Integration tests as the primary level (domain through model tests, flows through integration).
+
+### Performance additions
+
+**Core:**
+
+- **Database:** N+1s, missing indexes, missing counter caches (`counter_cache: true` on frequently-counted associations), missing `touch: true` for cache-key propagation.
+- **Query patterns:** `.pluck` vs `.select` for projection, `find_each` for large iterations, `update_all`/`delete_all` for bulk operations (with callback tradeoff noted), `in_batches` for destructive operations.
+- **View rendering:** Uncached collection partials (`cached: true`), Russian-doll caching opportunities, `cache` blocks keyed on stale attributes.
+- **Boot time:** Bootsnap enabled, `eager_load = true` in prod, `cache_classes = true` where expected, autoloader warnings noted.
+- **Memory:** Per-request bloat from wide `select *` on large tables, missing `select`/`pluck` in hot paths, `Marshal` round-trips in jobs.
+- **Asset pipeline:** Propshaft vs Sprockets choice justified, import maps for small JS vs bundler when code-splitting matters, missing `<link rel="preload">` for critical assets.
+- **Job hygiene:** Solid Queue/Sidekiq job timeouts set, idempotency on retry, `discard_on`/`retry_on` specified, not swallowing all exceptions.
+- **HTTP caching:** ETags configured (`etag`, `stale_when_importmap_changes`), `fresh_when`/`stale?` on show actions. Missing = users re-download unchanged pages.
+
+**37signals-style (gated):**
+
+- **Write-time over read-time.** Compute roll-ups at save, not at view time; denormalize counts where hot; precompute enums where presentation is expensive.
+- `enqueue_after_transaction_commit` on adapter or per-job — prevents race where the job runs before the transaction commits.
+- Money as integer (microcents) not float/decimal — if codebase already leans this way.
+
+### Modernization additions
+
+- **Rails 8 features:** Solid trio replacing Redis for small-medium scale, built-in authentication generator (new apps), Kamal 2 for deploy, Propshaft default, `allow_browser versions: :modern` for baseline browser gating, `stale_when_importmap_changes` for HTTP cache invalidation on JS updates.
+- **Rails 7.1+ features:** `params.expect`, encrypted attributes (`encrypts :column`), async queries (`.load_async`), `Current` thread-isolation for request-scoped state.
+- **Ruby 3.x:** Pattern matching for parsing responses, `Data.define` for value objects, anonymous block forwarding (`...`), endless methods for one-liners, rightward assignment.
+- **Hotwire current practice:** Turbo morph (`method: :morph`), View Transitions API, `<dialog>` element over JS modal libs, `requestSubmit` for progressive enhancement.
+- **Zeitwerk strictness:** `config.autoloader = :zeitwerk` (Rails 6+ default), no `require_dependency` carryovers.
+- **`strict_loading`** on associations to catch N+1s at development time before they ship.
+- **Active Record 7+:** `normalizes`, `generates_token_for`, `with` (CTEs), `composite_primary_keys`.
+- **Toolchain:** Ruby version inside security-support window, Rails version current, `bundler-audit` and `brakeman` in CI, Dependabot/Renovate for bundle + npm.
+
+### Summary additions
+
+Add rows: Ruby version, Rails version, test framework, Rubocop violations, Brakeman warnings, bundler-audit findings, missing-index count, N+1 risks flagged, 37signals-style alignment (Y/partial/N).
+
+### Extra anti-patterns
+
+- **Fat everything.** Fat controller → extract to model. Fat model → extract concern first, service object as last resort. Fat view → partial + helper.
+- **Callback web.** `after_*` hooks across 4+ models for one user action → promote to an explicit orchestration method on a model, or a domain event.
+- **Service object sprawl.** Single-caller, single-method `FooCreator`/`FooHandler` classes are anemic wrappers; push into the model unless orchestration crosses clear boundaries.
+- **Premature microservices / engines.** Splitting a monolith before it hurts is a speedrun to worse problems.
+- **Symptom patching.** Retry for a race → fix the race. Rescue/log for a nil → fix the producer. Cache-bust for stale view → fix the `touch` chain.
+- **Soft-delete by default.** Without compliance/audit requirement, soft deletes create a parallel schema with missing constraints. Default to hard delete; add `discarded_at` only when required.
+- **Negative naming.** `not_deleted`, `unpublished`, `is_not_archived` → invert (`active`, `draft`, `live`).
+- **Mixing Turbo and SPA without a boundary.** Commit to Hotwire or commit to the SPA; drifting between them doubles the frontend surface area.
+- **Ignoring Brakeman.** Every unaddressed warning is a deferred security review. Zero-warning baseline is the goal.
