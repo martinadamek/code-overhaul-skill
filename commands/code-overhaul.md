@@ -8,4 +8,4 @@ Examples:
   /code-overhaul-review                       Audit the current working directory
   /code-overhaul-review ~/projects/myapp      Audit a specific repo
 
-The skill starts with Step 0 (scope assessment), offers three modes (SURGICAL, SYSTEMATIC, FULL AUDIT), and walks five sections — architecture, code quality, tests, performance, dependencies — pausing after each for your input. Language-specific addendums for iOS/Swift, Go, Web/JS/CSS, and Ruby on Rails activate automatically based on what's in the repo.
+The skill starts with Step 0 (scope assessment), offers three modes (SURGICAL, SYSTEMATIC, FULL AUDIT), and walks five sections — architecture, code quality, tests, performance, dependencies — pausing after each for your input. Addendums for Ruby on Rails and its frontend (HTML/CSS/Stimulus) activate automatically based on what's in the repo.

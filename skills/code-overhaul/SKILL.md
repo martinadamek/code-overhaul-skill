@@ -4,9 +4,8 @@ version: 1.0.0
 description: |
   Audit a codebase for maintenance and modernization. Challenges scope,
   reviews architecture/quality/tests/performance/dependencies, files
-  deferred work via bd. Language-specific addendums for iOS/Swift, Go,
-  Web/JS/CSS, and Ruby on Rails activate automatically based on what's
-  in the repo. Supports monorepos with mixed stacks.
+  deferred work via bd. Addendums for Ruby on Rails and its frontend
+  (HTML/CSS/Stimulus) activate automatically based on what's in the repo.
 allowed-tools:
   - Read
   - Grep
@@ -21,7 +20,7 @@ Audit this codebase for maintenance, modernization, and overhaul. For every issu
 
 Health check, not feature review. Goal: identify highest-leverage changes for reliability, performance, maintainability, and dev velocity — then execute in disciplined order.
 
-**Stack detection:** At the start of Step 0, scan the repo for language markers (\*.swift/Xcode projects, go.mod, package.json/tsconfig, Gemfile/bin/rails). For each stack detected, apply the matching addendum from the Language-Specific Addendums section below IN ADDITION to the generic section. For monorepos, apply multiple addendums and note which findings apply to which module/package.
+**Stack detection:** At the start of Step 0, scan the repo. `Gemfile`/`bin/rails` triggers the Ruby on Rails addendum; `app/views/**/*.erb`, `app/assets/stylesheets/`, `app/javascript/`, or standalone HTML/CSS triggers the frontend addendum. Apply matching addendums IN ADDITION to the generic section.
 
 ## Priority hierarchy
 
@@ -177,7 +176,7 @@ Numbered, respecting: (1) inter-change dependencies, (2) impact/effort priority,
 ╚════════════════════════════════════════════════╝
 ```
 
-Add stack-specific rows from addendums (e.g., force-unwrap count, `any` count, race-clean status).
+Add stack-specific rows from addendums (e.g., Rubocop violations, Brakeman warnings, LCP).
 
 ## Retrospective learning
 
@@ -201,210 +200,72 @@ List at end: "Unresolved decisions that may bite you later." Never silently defa
 
 ---
 
-# Language-Specific Addendums
+# Addendums
 
-Apply these when the corresponding stack is detected. For monorepos, apply all matching addendums and tag each finding with its module.
-
----
-
-## Addendum: iOS / Swift
-
-**Triggers:** _.swift files, _.xcodeproj, \*.xcworkspace, Package.swift with Apple platform targets.
-
-### Step 0 additions
-
-- Run: Xcode warnings count, SwiftLint violations, deployment target (min iOS version).
-- Deployment target determines: SwiftUI API surface, structured concurrency availability, which UIKit workarounds can die.
-- Dep audit specifics: SPM/CocoaPods/Carthage. Replaceable: Kingfisher→AsyncImage, Alamofire→URLSession async/await, SnapKit→modern AutoLayout, RxSwift→Combine/async-await, KeychainAccess→native keychain, SwiftyJSON→Codable, IQKeyboardManager→native keyboard avoidance.
-
-### Architecture additions
-
-- State management consistency: @Observable vs ObservableObject vs @State — pick one per concern, not mix-and-match.
-- Navigation: NavigationStack vs coordinator pattern vs mixed — consistent?
-- Concurrency model: structured concurrency adoption boundary vs legacy GCD/completion handlers. Where is the migration line?
-- Core Data / SwiftData stack health. Extension targets sharing code correctly?
-
-### Code quality additions
-
-- **Force-unwraps and implicitly unwrapped optionals** — cite every one, these are crash sources.
-- `try?` swallowing errors silently. Empty catch blocks.
-- Retain cycle risks: missing `[weak self]` in closures, non-weak delegate properties.
-- Unused @objc exposure, stale Storyboard/XIB connections, dead IBOutlets/IBActions.
-- Massive ViewControllers/Views (>300 lines).
-- Protocol-oriented over-engineering: protocol with one conformer, unnecessary associated types.
-
-### Test additions
-
-- XCTest vs Swift Testing adoption. UI test reliability (flag >10s per UI test).
-- Test host app dependency — can unit tests run without app launch?
-- Core Data tests using in-memory stores? Network tests using URLProtocol mocks?
-- Total suite time matters with large test counts — flag >60s.
-- Missing: snapshot tests for complex layouts, accessibility audit tests.
-
-### Performance additions
-
-- **Launch:** Pre-main (dylib loading, +load, static initializers) and post-main. Synchronous main-thread work in `didFinishLaunching`?
-- **Main thread:** File I/O, JSON parsing, image decoding, Core Data fetches on main.
-- **Scrolling:** Cell reuse, async image loading, Auto Layout ambiguity, offscreen rendering (cornerRadius + clipsToBounds).
-- **Media:** Image downsample before display? PhotoKit fetch efficiency? Unnecessary format conversions?
-- **Build:** Slowest files via `-Xfrontend -debug-time-function-bodies`. Complex type inference. SPM resolution time.
-- **Binary:** Unused asset catalog entries, embedded resources that could be on-demand.
-
-### Modernization additions
-
-- Structured concurrency: async/await, actors, task groups.
-- @Observable macro (iOS 17+), #Preview macros, @Entry for EnvironmentValues.
-- Typed throws (Swift 6), strict concurrency checking readiness.
-- Xcode hygiene: unused build phases, stale schemes, code signing drift, build settings at wrong level.
-
-### Summary additions
-
-Add rows: Min iOS target, Swift version, force-unwrap count, SwiftLint violations.
-
-### Extra anti-pattern
-
-- UIKit-to-SwiftUI migration without a boundary strategy → define the bridge pattern once, use everywhere.
+Apply each addendum when its triggers are present. On a typical Rails app, both the Rails addendum and the Frontend addendum fire together.
 
 ---
 
-## Addendum: Go
+## Addendum: Frontend (HTML / CSS / Stimulus)
 
-**Triggers:** go.mod, \*.go files.
-
-### Step 0 additions
-
-- Run: `go vet`, `staticcheck`, `golangci-lint`, `govulncheck ./...`, `go mod tidy` drift check.
-- Go version in go.mod determines: range-over-func (1.23+), log/slog (1.21+), errors.Join (1.20+), generics depth, loop variable fix (1.22+).
-- Dep audit specifics: `go list -m -u all`. Replaceable: gorilla/mux→stdlib 1.22+ routing, logrus→log/slog, pkg/errors→fmt.Errorf %w, testify→stdlib testing, go-playground/validator→custom, gorm→sqlc/sqlx, cobra→stdlib flag for simple CLIs.
-
-### Architecture additions
-
-- Package boundaries: `internal/` usage correct? Circular dep risks?
-- Interface pollution: too many interfaces defined by implementor rather than consumer. Accept interfaces, return structs.
-- Dependency injection: wire, manual, or scattered `init()`?
-- Graceful shutdown chain: signal → context cancellation → resource cleanup.
-- Error propagation: sentinel vs typed vs wrapping — consistent?
-- Context: values vs cancellation — abuse?
-
-### Code quality additions
-
-- **Unchecked errors:** `_ = foo()` — cite every one unless justified with comment.
-- Naked returns in complex functions.
-- Package-level globals and `init()` abuse.
-- Naming: Go conventions (MixedCaps, 1-2 char receivers, lowercase single-word packages). Stuttering (`user.UserService`).
-- Over-engineering: interfaces with one implementation, unnecessary generics, Options pattern for 2 config values.
-- Under-engineering: 2000+ line files, >5 params, `any`/`interface{}` where generics clarify.
-
-### Test additions
-
-- Table-driven tests consistent? `t.Helper()` used? Subtests with `t.Run()`?
-- Integration tests tagged `//go:build integration`?
-- **Race detector:** `go test -race` passing? This is a gate, not optional.
-- Benchmarks for hot paths (`BenchmarkX`). Fuzz tests for parsers (`FuzzX`).
-- Golden files for complex output. `testdata/` organized?
-- Mocking: interfaces at boundaries only, not mocking everything. `httptest` for handlers.
-
-### Performance additions
-
-- **CPU:** Unnecessary allocations in tight paths, reflection in hot code, regexp compilation inside loops (compile once as package var), string concat in loops (strings.Builder).
-- **Memory:** Goroutine leaks (unbounded spawn without context cancel), sync.Pool opportunities, slice pre-alloc (`make([]T, 0, cap)`), string↔[]byte in hot paths.
-- **Concurrency:** Mutex contention (RWMutex? atomic?), channel buffer sizing, goroutine fan-out without limits (errgroup), context propagation gaps.
-- **I/O:** Connection pool sizing, prepared statement reuse, N+1 queries, HTTP client reuse (not per-request), response body not closed, bufio for files.
-- **Build:** CGO (slows build, complicates cross-compile), unnecessary `go generate`.
-- **Binary:** `-ldflags "-s -w"`, `-trimpath`, unused dep bloat.
-
-### Modernization additions
-
-- Generics replacing `interface{}`/codegen where it clarifies (only with >2 concrete types).
-- range-over-func (1.23+), log/slog, errors.Join, loop variable fix (1.22+) — remove workarounds.
-- iter package (1.23+), any/comparable constraints.
-- Toolchain: Makefile/Taskfile hygiene, golangci-lint config freshness, CI (test, vet, lint, race, vulncheck).
-
-### Summary additions
-
-Add rows: Go version (mod), go vet issues, staticcheck issues, govulncheck findings, unchecked errors, race clean Y/N.
-
-### Extra anti-patterns
-
-- Over-interfacing → one-method interfaces are Go's sweet spot, not the starting point.
-- Premature generics → only when >2 concrete types and pattern is proven.
-
----
-
-## Addendum: Web / JavaScript / CSS
-
-**Triggers:** package.json, tsconfig.json, _.js, _.ts, _.jsx, _.tsx, _.css, _.scss, \*.html files.
+**Triggers:** `app/views/**/*.erb`, `app/assets/stylesheets/`, `app/javascript/`, `config/importmap.rb`, or standalone `*.html`, `*.css`, `*.scss`. Scoped to Hotwire-era Rails frontends: HTML, CSS, and Stimulus controllers. SPA concerns (TypeScript, bundlers, state management, client-side data fetching, component frameworks) are out of scope for this fork.
 
 ### Step 0 additions
 
-- Run: `tsc --noEmit` errors, ESLint/Prettier violations, `npm audit`, bundle size (total + per-route).
-- TypeScript strict mode on? If not, migration path is high-priority.
-- Browser floor (browserslist) determines: CSS nesting, :has(), container queries, structuredClone, AbortSignal.any, Promise.withResolvers.
-- Dep audit: `npm outdated`. Replaceable: moment→Temporal/date-fns, lodash→native (Array.at, Object.groupBy, structuredClone), axios→fetch, classnames→clsx/template literals, uuid→crypto.randomUUID, node-fetch→native fetch (Node 18+).
+- Run: stylelint if configured, Lighthouse Core Web Vitals on a representative page, `importmap.rb` hygiene (CDN-pinned vs vendored pins), Tailwind config review if Tailwind is in use.
+- Browser floor: if Rails sets `allow_browser versions: :modern`, confirm what that resolves to today — determines availability of CSS nesting, `:has()`, container queries, View Transitions API, Popover API, `<dialog>`, `color-mix()`, `@property`, `structuredClone`, `Array.at`, `crypto.randomUUID`.
 
 ### Architecture additions
 
-- Component hierarchy (draw tree). State management: local vs global, prop drilling vs context vs store — consistent?
-- Data fetching: per-component vs route-level vs centralized? Caching/dedup? Loading/error states?
-- API layer: fetch calls scattered or centralized?
-- SSR/SSG/CSR boundaries if applicable. Error boundary placement.
-- Build config complexity. Environment handling.
+- Server-driven by default. JS only where browser affordances are insufficient — `<dialog>`, `<details>`, native form validation, links/buttons should be the first answer.
+- Stimulus controller granularity: one controller per concern, not mega-controllers. Values/targets/classes declared in the controller, not accessed dynamically.
+- Importmap vs jsbundling-rails choice: importmap for small (<100 KB gzipped total JS), jsbundling-rails (esbuild/rollup) when code-splitting or npm packages outside CDN coverage matter.
 
 ### Code quality additions
 
-**JS/TS:**
+**JS (Stimulus / Hotwire):**
 
-- **`any` types** — cite every one, these defeat TypeScript.
-- `as` assertions bypassing safety. Loose equality (`==`).
-- Uncaught promise rejections. Missing error boundaries.
-- Barrel file bloat killing tree-shaking. Unused exports (`ts-prune`).
-- Component files >300 lines.
+- Event listener cleanup: listeners attached in `connect()` must be removed in `disconnect()`, OR attached via `this.element.addEventListener` / Stimulus actions so the framework cleans up on Turbo navigation.
+- DOM references or timers held past `disconnect()` → memory leak across Turbo navigations.
+- Globals on `window` — flag; prefer Stimulus values, data attributes, or module-scoped state.
+- Uncaught promise rejections — fetch without `.catch`, async action handlers without try/catch.
 
 **CSS:**
 
 - Specificity wars, `!important` proliferation.
-- Magic numbers without custom properties. Duplicated values needing design tokens.
-- Unused CSS. Inconsistent naming (BEM vs utility vs random).
+- Magic numbers without CSS custom properties. Duplicated values needing design tokens.
+- Unused CSS. Tailwind: `@apply` overuse rebuilding a component layer Tailwind already discourages.
+- Inconsistent naming: BEM vs utility vs ad-hoc — pick one per layer.
 - z-index: documented scale or chaos? Media queries: scattered or centralized?
-- CSS-in-JS vs stylesheets vs utility — consistent approach?
 
-**HTML/Accessibility:**
+**HTML / ERB / Accessibility:**
 
-- Semantic HTML (div soup?). ARIA: missing or wrong. Keyboard nav, focus management, color contrast, alt text, form labels, heading hierarchy.
-
-### Test additions
-
-- Unit (Jest/Vitest) for logic. Component (Testing Library) for behavior — flag `getByTestId` overuse, prefer `getByRole`/`getByText`.
-- E2E (Playwright/Cypress) for critical paths. Visual regression for complex layouts.
-- MSW for network mocking — consistent? Snapshot tests: useful or noise?
-- Accessibility tests (axe-core). Suite speed: flag >30s total, >5s individual.
+- Semantic HTML (div soup in ERB partials).
+- ARIA: missing or wrong.
+- Keyboard nav and focus management — especially after Turbo Stream replacements and `morph` updates (focus is easy to lose when nodes are swapped).
+- Color contrast, alt text, form labels, heading hierarchy.
 
 ### Performance additions
 
-- **Core Web Vitals:** LCP (critical rendering path), CLS (images without dimensions, font flash, dynamic injection), INP (long tasks, heavy handlers).
-- **Bundle:** Per-route splits, tree-shaking effective?, dynamic imports for below-fold, duplicate deps, `source-map-explorer` analysis.
-- **Loading:** Critical CSS inlined? Render-blocking resources? Font strategy (font-display, preload)? Images (WebP/AVIF, srcset, lazy load, explicit dimensions)?
-- **Runtime:** Unnecessary re-renders (missing memo where measured), DOM thrashing, event listener cleanup, Web Worker opportunities, requestAnimationFrame for visual updates.
-- **Caching:** Service worker strategy, HTTP headers, CDN, stale-while-revalidate, asset fingerprinting.
-- **Network:** API waterfall (sequential→parallel), overfetching, missing pagination.
+- **Core Web Vitals:** LCP (above-fold image optimization, render-blocking resources, critical CSS), CLS (images without explicit dimensions, font flash, dynamic content injection), INP (heavy Stimulus handlers, long tasks on input).
+- **Loading:** Critical CSS inlined? Font strategy (`font-display: swap`, preload critical fonts)? Images (WebP/AVIF, `srcset`, `loading="lazy"`, explicit `width`/`height`)?
+- **Runtime:** DOM thrashing, `requestAnimationFrame` for visual updates, debouncing input handlers, avoiding sync layout in handlers.
+- **Caching:** Propshaft fingerprinting active, CDN in front of `/assets/`, `stale-while-revalidate` headers on HTML where appropriate.
 
 ### Modernization additions
 
-- CSS: native nesting (drop preprocessor nesting), container queries, `:has()`, View Transitions, Popover API, `<dialog>` (drop modal libs), `color-mix()`, `@property`.
-- TS: strict mode path, `satisfies`, template literal types, discriminated unions, `using` (5.2+).
-- Platform: structuredClone, Object.groupBy, Set methods, import attributes.
-- Toolchain: bundler currency (Webpack→Vite?), Node version, package manager consistency, monorepo tooling, preview deployments.
+- CSS: native nesting (drop preprocessor nesting), container queries, `:has()`, View Transitions API (Turbo 8+ integrates), Popover API, `<dialog>` (drop JS modal libs), `color-mix()`, `@property`, cascade layers.
+- Platform JS: `structuredClone`, `Object.groupBy`, Set methods, `crypto.randomUUID`, `Array.at`, `Promise.withResolvers`, `AbortSignal.any`.
 
 ### Summary additions
 
-Add rows: Framework, TS strict Y/N, `any` count, ESLint violations, bundle size (gzip), npm audit vulns, LCP.
+Add rows: LCP (p75), stylelint violations, accessibility issues (axe).
 
 ### Extra anti-patterns
 
 - Premature abstraction → don't build a component system for 3 buttons.
 - CSS reset whack-a-mole → fix the specificity model, not symptoms.
-- `any` as escape hatch → every `any` is deferred debt with compound interest.
-- Framework churn → migrate when solving a concrete problem, not for novelty.
+- JS-first where HTML/CSS affordances suffice → reach for `<dialog>`, `<details>`, native form validation, or a plain link before writing a Stimulus controller.
 
 ---
 
